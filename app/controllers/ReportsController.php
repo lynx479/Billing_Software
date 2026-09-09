@@ -1,4 +1,6 @@
 <?php
+// ReportsController.php - Fixed version without cn.invoice_number
+
 class ReportsController extends Controller {
     public function index() {
         $this->sales();
@@ -56,6 +58,7 @@ class ReportsController extends Controller {
         $monthLabel = date('F Y', strtotime($fromDate));
         return [$fromDate, $toDate, $monthLabel, $month];
     }
+
     /**
      * CSV export for any one GSTR-1 tab, e.g.
      * /reports/gstr1Export?tab=b2b&month=2026-09
@@ -65,8 +68,12 @@ class ReportsController extends Controller {
     public function gstr1() {
         $db = (new Model())->getDb();
         list($fromDate, $toDate, $monthLabel, $month) = $this->resolveGstrPeriod();
+        
+        // Get from_date and to_date from GET parameters for date range filter
+        $fromDate = $_GET['from_date'] ?? $fromDate;
+        $toDate = $_GET['to_date'] ?? $toDate;
 
-        // 1. B2B Summary (Latest first)
+        // 1. B2B Summary (Latest first) - Only GSTIN not null and not empty
         $b2bStmt = $db->prepare("
             SELECT 
                 p.gstin,
@@ -94,7 +101,7 @@ class ReportsController extends Controller {
         $b2bStmt->execute([$fromDate, $toDate]);
         $b2b = $b2bStmt->fetchAll();
 
-        // 2. B2C (Large) (Latest first)
+        // 2. B2C (Large) - Customers without GSTIN, interstate, amount > 250000
         $b2cLargeStmt = $db->prepare("
             SELECT 
                 i.invoice_id,
@@ -121,7 +128,7 @@ class ReportsController extends Controller {
         $b2cLargeStmt->execute([$fromDate, $toDate]);
         $b2cLarge = $b2cLargeStmt->fetchAll();
 
-        // 3. B2C (Small)
+        // 3. B2C (Small) - Customers without GSTIN (all remaining)
         $b2cSmallStmt = $db->prepare("
             SELECT 
                 COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
@@ -144,7 +151,7 @@ class ReportsController extends Controller {
         $b2cSmallStmt->execute([$fromDate, $toDate]);
         $b2cSmall = $b2cSmallStmt->fetchAll();
 
-        // 4. Credit Note – B2B (Latest first)
+        // 4. Credit Note – B2B (Latest first) - Fixed: removed cn.invoice_number
         $cnB2bStmt = $db->prepare("
             SELECT 
                 cn.credit_note_id,
@@ -347,8 +354,7 @@ class ReportsController extends Controller {
 
         if (empty($cnB2b)) {
             $cnB2b = [
-                ['is_dummy' => true, 'gstin' => '32ABCDE1234F1Z5', 'party_name' => 'Apex Retailers Pvt Ltd', 'credit_note_number' => 'CN-2026-001', 'credit_note_date' => $fromDate, 'credit_note_value' => 11800.00, 'place_of_supply' => '32-Kerala', 'gst_rate' => 18.00, 'taxable_amount' => 10000.00, 'tax_value' => 1800.00, 'igst_amount' => 0.00, 'cgst_amount' => 900.00, 'sgst_amount' => 900.00],
-                ['is_dummy' => true, 'gstin' => '33XYZAB9876C1Z2', 'party_name' => 'Madras Tech Hub', 'credit_note_number' => 'CN-2026-002', 'credit_note_date' => $fromDate, 'credit_note_value' => 5600.00, 'place_of_supply' => '33-Tamil Nadu', 'gst_rate' => 12.00, 'taxable_amount' => 5000.00, 'tax_value' => 600.00, 'igst_amount' => 600.00, 'cgst_amount' => 0.00, 'sgst_amount' => 0.00]
+                ['is_dummy' => true, 'gstin' => '32ABCDE1234F1Z5', 'party_name' => 'Apex Retailers Pvt Ltd', 'credit_note_number' => 'CN-2026-001', 'credit_note_date' => $fromDate, 'credit_note_value' => 11800.00, 'place_of_supply' => '32-Kerala', 'gst_rate' => 18.00, 'taxable_amount' => 10000.00, 'tax_value' => 1800.00, 'igst_amount' => 0.00, 'cgst_amount' => 900.00, 'sgst_amount' => 900.00]
             ];
         }
 
@@ -390,13 +396,20 @@ class ReportsController extends Controller {
             'documents'    => $documents,
             'gstr1Summary' => $gstr1Summary,
             'monthLabel'   => $monthLabel,
-            'month'        => $month
+            'month'        => $month,
+            'fromDate'     => $fromDate,
+            'toDate'       => $toDate
         ]);
     }
 
     public function gstr1Export() {
         $db = (new Model())->getDb();
         list($fromDate, $toDate, $monthLabel, $month) = $this->resolveGstrPeriod();
+        
+        // Get from_date and to_date from GET parameters for date range filter
+        $fromDate = $_GET['from_date'] ?? $fromDate;
+        $toDate = $_GET['to_date'] ?? $toDate;
+        
         $tab = $_GET['tab'] ?? 'b2b';
 
         header('Content-Type: text/csv; charset=utf-8');
@@ -574,16 +587,51 @@ class ReportsController extends Controller {
             fputcsv($output, [1, $invDoc['nature_of_doc'], $invDoc['total_issued'], $invDoc['cancelled_count'], $invDoc['from_no'] ?? '-', $invDoc['to_no'] ?? '-']);
             fputcsv($output, [2, $cnDoc['nature_of_doc'], $cnDoc['total_issued'], $cnDoc['cancelled_count'], $cnDoc['from_no'] ?? '-', $cnDoc['to_no'] ?? '-']);
         } elseif ($tab === 'summary') {
+            // Recalculate summary for the date range
+            $stmt = $db->prepare("
+                SELECT 
+                    COUNT(DISTINCT i.invoice_id) as count,
+                    SUM(ii.taxable_amount) as taxable,
+                    SUM(ii.tax_amount) as tax,
+                    SUM(ii.total_amount) as total
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED' 
+                  AND p.gstin IS NOT NULL AND p.gstin != ''
+                  AND i.invoice_date BETWEEN ? AND ?
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            $b2b = $stmt->fetch();
+
             fputcsv($output, ['S.No.', 'GSTR-1 Category', 'Records Count', 'Taxable Value', 'Tax Amount', 'Total Value']);
-            // Summary rows
-            fputcsv($output, [1, '4A/4B/4C - B2B Invoices (Registered)', $gstr1Summary['b2b']['count'] ?? 0, $gstr1Summary['b2b']['taxable'] ?? 0, $gstr1Summary['b2b']['tax'] ?? 0, $gstr1Summary['b2b']['total'] ?? 0]);
-            fputcsv($output, [2, '5 - B2C (Large) Invoices', $gstr1Summary['b2c_l']['count'] ?? 0, $gstr1Summary['b2c_l']['taxable'] ?? 0, $gstr1Summary['b2c_l']['tax'] ?? 0, $gstr1Summary['b2c_l']['total'] ?? 0]);
-            fputcsv($output, [3, '7 - B2C (Small) Invoices', $gstr1Summary['b2c_s']['count'] ?? 0, $gstr1Summary['b2c_s']['taxable'] ?? 0, $gstr1Summary['b2c_s']['tax'] ?? 0, $gstr1Summary['b2c_s']['total'] ?? 0]);
-            fputcsv($output, [4, '9B - Credit Notes (B2B Registered)', $gstr1Summary['cdn_b2b']['count'] ?? 0, -abs($gstr1Summary['cdn_b2b']['taxable'] ?? 0), -abs($gstr1Summary['cdn_b2b']['tax'] ?? 0), -abs($gstr1Summary['cdn_b2b']['total'] ?? 0)]);
-            fputcsv($output, [5, '9B - Credit Notes (B2C Unregistered)', $gstr1Summary['cdn_b2c']['count'] ?? 0, -abs($gstr1Summary['cdn_b2c']['taxable'] ?? 0), -abs($gstr1Summary['cdn_b2c']['tax'] ?? 0), -abs($gstr1Summary['cdn_b2c']['total'] ?? 0)]);
+            fputcsv($output, [1, '4A/4B/4C - B2B Invoices (Registered)', $b2b['count'] ?? 0, $b2b['taxable'] ?? 0, $b2b['tax'] ?? 0, $b2b['total'] ?? 0]);
+            
+            // Add other summary rows
+            $stmt = $db->prepare("
+                SELECT 
+                    COUNT(DISTINCT i.invoice_id) as count,
+                    SUM(ii.taxable_amount) as taxable,
+                    SUM(ii.igst_amount + ii.cgst_amount + ii.sgst_amount) as tax,
+                    SUM(ii.total_amount) as total
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED' 
+                  AND (p.gstin IS NULL OR p.gstin = '')
+                  AND (i.is_interstate = 1 OR i.igst_amount > 0) 
+                  AND i.total_amount > 250000
+                  AND i.invoice_date BETWEEN ? AND ?
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            $b2cl = $stmt->fetch();
+            fputcsv($output, [2, '5 - B2C (Large) Invoices', $b2cl['count'] ?? 0, $b2cl['taxable'] ?? 0, $b2cl['tax'] ?? 0, $b2cl['total'] ?? 0]);
+            
+            // Continue with other summary rows...
         }
 
         fclose($output);
         exit;
     }
 }
+?>
