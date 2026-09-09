@@ -56,8 +56,6 @@ class ReportsController extends Controller {
         $monthLabel = date('F Y', strtotime($fromDate));
         return [$fromDate, $toDate, $monthLabel, $month];
     }
-
-    
     /**
      * CSV export for any one GSTR-1 tab, e.g.
      * /reports/gstr1Export?tab=b2b&month=2026-09
@@ -68,9 +66,7 @@ class ReportsController extends Controller {
         $db = (new Model())->getDb();
         list($fromDate, $toDate, $monthLabel, $month) = $this->resolveGstrPeriod();
 
-        // ---------------------------------------------------------------
-        // 1. B2B Summary (Split per GST Tax Rate per invoice)
-        // ---------------------------------------------------------------
+        // 1. B2B Summary (Latest first)
         $b2bStmt = $db->prepare("
             SELECT 
                 p.gstin,
@@ -93,14 +89,12 @@ class ReportsController extends Controller {
               AND p.gstin IS NOT NULL AND p.gstin != ''
               AND i.invoice_date BETWEEN ? AND ?
             GROUP BY i.invoice_id, ii.tax_rate
-            ORDER BY i.invoice_date ASC, i.invoice_number ASC, ii.tax_rate ASC
+            ORDER BY i.invoice_date DESC, i.invoice_number DESC, ii.tax_rate ASC
         ");
         $b2bStmt->execute([$fromDate, $toDate]);
         $b2b = $b2bStmt->fetchAll();
 
-        // ---------------------------------------------------------------
-        // 2. B2C (Large): Interstate, Invoice Value > 2,50,000, Unregistered
-        // ---------------------------------------------------------------
+        // 2. B2C (Large) (Latest first)
         $b2cLargeStmt = $db->prepare("
             SELECT 
                 i.invoice_id,
@@ -122,14 +116,12 @@ class ReportsController extends Controller {
               AND i.total_amount > 250000
               AND i.invoice_date BETWEEN ? AND ?
             GROUP BY i.invoice_id, ii.tax_rate
-            ORDER BY i.invoice_date ASC
+            ORDER BY i.invoice_date DESC, i.invoice_number DESC
         ");
         $b2cLargeStmt->execute([$fromDate, $toDate]);
         $b2cLarge = $b2cLargeStmt->fetchAll();
 
-        // ---------------------------------------------------------------
-        // 3. B2C (Small): Intrastate or Interstate <= 2,50,000 grouped by POS & Rate
-        // ---------------------------------------------------------------
+        // 3. B2C (Small)
         $b2cSmallStmt = $db->prepare("
             SELECT 
                 COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
@@ -152,9 +144,7 @@ class ReportsController extends Controller {
         $b2cSmallStmt->execute([$fromDate, $toDate]);
         $b2cSmall = $b2cSmallStmt->fetchAll();
 
-        // ---------------------------------------------------------------
-        // 4. Credit Note – B2B (Multi-rate item split per Note)
-        // ---------------------------------------------------------------
+        // 4. Credit Note – B2B (Latest first)
         $cnB2bStmt = $db->prepare("
             SELECT 
                 cn.credit_note_id,
@@ -176,14 +166,12 @@ class ReportsController extends Controller {
             WHERE p.gstin IS NOT NULL AND p.gstin != ''
               AND cn.credit_note_date BETWEEN ? AND ?
             GROUP BY cn.credit_note_id, cni.tax_rate
-            ORDER BY cn.credit_note_date ASC, cn.credit_note_number ASC, cni.tax_rate ASC
+            ORDER BY cn.credit_note_date DESC, cn.credit_note_number DESC, cni.tax_rate ASC
         ");
         $cnB2bStmt->execute([$fromDate, $toDate]);
         $cnB2b = $cnB2bStmt->fetchAll();
 
-        // ---------------------------------------------------------------
-        // 5. Credit Note – B2C (Multi-rate item split per Note)
-        // ---------------------------------------------------------------
+        // 5. Credit Note – B2C (Latest first)
         $cnB2cStmt = $db->prepare("
             SELECT 
                 cn.credit_note_id,
@@ -202,14 +190,12 @@ class ReportsController extends Controller {
             WHERE (p.gstin IS NULL OR p.gstin = '')
               AND cn.credit_note_date BETWEEN ? AND ?
             GROUP BY cn.credit_note_id, cni.tax_rate
-            ORDER BY cn.credit_note_date ASC, cn.credit_note_number ASC, cni.tax_rate ASC
+            ORDER BY cn.credit_note_date DESC, cn.credit_note_number DESC, cni.tax_rate ASC
         ");
         $cnB2cStmt->execute([$fromDate, $toDate]);
         $cnB2c = $cnB2cStmt->fetchAll();
 
-        // ---------------------------------------------------------------
         // 6. HSN B2C
-        // ---------------------------------------------------------------
         $hsnB2cStmt = $db->prepare("
             SELECT 
                 COALESCE(NULLIF(ii.hsn_sac, ''), NULLIF(it.hsn_sac, ''), 'N/A') AS hsn_sac,
@@ -235,9 +221,7 @@ class ReportsController extends Controller {
         $hsnB2cStmt->execute([$fromDate, $toDate]);
         $hsnB2c = $hsnB2cStmt->fetchAll();
 
-        // ---------------------------------------------------------------
         // 7. HSN B2B
-        // ---------------------------------------------------------------
         $hsnB2bStmt = $db->prepare("
             SELECT 
                 COALESCE(NULLIF(ii.hsn_sac, ''), NULLIF(it.hsn_sac, ''), 'N/A') AS hsn_sac,
@@ -263,9 +247,7 @@ class ReportsController extends Controller {
         $hsnB2bStmt->execute([$fromDate, $toDate]);
         $hsnB2b = $hsnB2bStmt->fetchAll();
 
-        // ---------------------------------------------------------------
-        // 8. Item Summary (using acc_invoice_items & acc_items)
-        // ---------------------------------------------------------------
+        // 8. Item Summary
         $itemSumStmt = $db->prepare("
             SELECT 
                 ii.item_name,
@@ -286,9 +268,7 @@ class ReportsController extends Controller {
         $itemSumStmt->execute([$fromDate, $toDate]);
         $itemSummary = $itemSumStmt->fetchAll();
 
-        // ---------------------------------------------------------------
         // 9. Documents
-        // ---------------------------------------------------------------
         $docStmt = $db->prepare("
             SELECT
                 'Tax Invoices' AS nature_of_doc,
@@ -318,9 +298,7 @@ class ReportsController extends Controller {
             $cnDoc ?: ['nature_of_doc' => 'Credit Notes', 'total_issued' => 0, 'cancelled_count' => 0, 'from_no' => '-', 'to_no' => '-']
         ];
 
-        // ---------------------------------------------------------------
         // 10. GSTR-1 Summary Calculations
-        // ---------------------------------------------------------------
         $b2bTaxable = array_sum(array_column($b2b, 'taxable_amount'));
         $b2bTax = array_sum(array_column($b2b, 'tax_value'));
         $b2bTotal = $b2bTaxable + $b2bTax;
@@ -352,9 +330,7 @@ class ReportsController extends Controller {
             'net_total'   => ($b2bTotal + $b2clTotal + $b2csTotal) - ($cnb2bTotal + $cnb2cTotal),
         ];
 
-        // ---------------------------------------------------------------
-        // DUMMY/SAMPLE DATA INJECTION (Visual UI inspection if table empty)
-        // ---------------------------------------------------------------
+        // Sample fallback data
         if (empty($b2cLarge)) {
             $b2cLarge = [
                 ['is_dummy' => true, 'invoice_number' => 'INV-L-1001', 'invoice_date' => $fromDate, 'invoice_value' => 295000.00, 'place_of_supply' => '33-Tamil Nadu', 'tax_rate' => 18.00, 'taxable_amount' => 250000.00, 'igst_amount' => 45000.00, 'cgst_amount' => 0.00, 'sgst_amount' => 0.00]
@@ -416,5 +392,198 @@ class ReportsController extends Controller {
             'monthLabel'   => $monthLabel,
             'month'        => $month
         ]);
+    }
+
+    public function gstr1Export() {
+        $db = (new Model())->getDb();
+        list($fromDate, $toDate, $monthLabel, $month) = $this->resolveGstrPeriod();
+        $tab = $_GET['tab'] ?? 'b2b';
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=gstr1_' . $tab . '_' . $month . '.csv');
+        $output = fopen('php://output', 'w');
+
+        if ($tab === 'b2b') {
+            $stmt = $db->prepare("
+                SELECT p.gstin, p.name AS party_name, i.invoice_number, i.invoice_date, i.total_amount AS invoice_value,
+                       COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                       ii.tax_rate AS gst_rate, SUM(ii.taxable_amount) AS taxable_amount, SUM(ii.tax_amount) AS tax_value,
+                       SUM(ii.igst_amount) AS igst_amount, SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED' AND p.gstin IS NOT NULL AND p.gstin != '' AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY i.invoice_id, ii.tax_rate
+                ORDER BY i.invoice_date DESC, i.invoice_number DESC, ii.tax_rate ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'GSTIN', 'Party Name', 'Invoice Number', 'Invoice Date', 'Invoice Value', 'Place of Supply', 'GST Rate %', 'Tax Value', 'IGST', 'CGST', 'SGST']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['gstin'], $r['party_name'], $r['invoice_number'], $r['invoice_date'], $r['invoice_value'], $r['place_of_supply'], $r['gst_rate'], $r['tax_value'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
+            }
+        } elseif ($tab === 'b2cl') {
+            $stmt = $db->prepare("
+                SELECT i.invoice_number, i.invoice_date, i.total_amount AS invoice_value,
+                       COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                       ii.tax_rate, SUM(ii.taxable_amount) AS taxable_amount, SUM(ii.igst_amount) AS igst_amount,
+                       SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED' AND (p.gstin IS NULL OR p.gstin = '')
+                  AND (i.is_interstate = 1 OR i.igst_amount > 0) AND i.total_amount > 250000 AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY i.invoice_id, ii.tax_rate
+                ORDER BY i.invoice_date DESC, i.invoice_number DESC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'Invoice Number', 'Invoice Date', 'Invoice Value', 'Place of Supply', 'Tax Rate %', 'Taxable Value', 'IGST', 'CGST', 'SGST']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['invoice_number'], $r['invoice_date'], $r['invoice_value'], $r['place_of_supply'], $r['tax_rate'], $r['taxable_amount'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
+            }
+        } elseif ($tab === 'b2cs') {
+            $stmt = $db->prepare("
+                SELECT COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                       ii.tax_rate, SUM(ii.taxable_amount) AS taxable_amount, SUM(ii.igst_amount) AS igst_amount,
+                       SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED' AND (p.gstin IS NULL OR p.gstin = '')
+                  AND NOT ((i.is_interstate = 1 OR i.igst_amount > 0) AND i.total_amount > 250000) AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY place_of_supply, ii.tax_rate
+                ORDER BY place_of_supply ASC, ii.tax_rate ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'Place of Supply', 'Tax Rate %', 'Taxable Value', 'IGST', 'CGST', 'SGST']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['place_of_supply'], $r['tax_rate'], $r['taxable_amount'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
+            }
+        } elseif ($tab === 'cdnb2b') {
+            $stmt = $db->prepare("
+                SELECT p.gstin, p.name AS party_name, cn.credit_note_number, cn.credit_note_date, cn.total_amount AS credit_note_value,
+                       COALESCE(NULLIF(cn.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                       cni.tax_rate AS gst_rate, SUM(cni.taxable_amount) AS taxable_amount, SUM(cni.tax_amount) AS tax_value,
+                       SUM(CASE WHEN cn.is_interstate = 1 THEN cni.tax_amount ELSE 0 END) AS igst_amount,
+                       SUM(CASE WHEN cn.is_interstate = 0 THEN cni.tax_amount / 2 ELSE 0 END) AS cgst_amount,
+                       SUM(CASE WHEN cn.is_interstate = 0 THEN cni.tax_amount / 2 ELSE 0 END) AS sgst_amount
+                FROM acc_credit_notes cn
+                JOIN acc_parties p ON cn.party_id = p.party_id
+                JOIN acc_credit_note_items cni ON cn.credit_note_id = cni.credit_note_id
+                WHERE p.gstin IS NOT NULL AND p.gstin != '' AND cn.credit_note_date BETWEEN ? AND ?
+                GROUP BY cn.credit_note_id, cni.tax_rate
+                ORDER BY cn.credit_note_date DESC, cn.credit_note_number DESC, cni.tax_rate ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'GSTIN', 'Party Name', 'Credit Note Number', 'Credit Note Date', 'Credit Note Value', 'Place of Supply', 'GST Rate %', 'Tax Value', 'IGST', 'CGST', 'SGST']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['gstin'], $r['party_name'], $r['credit_note_number'], $r['credit_note_date'], $r['credit_note_value'], $r['place_of_supply'], $r['gst_rate'], $r['tax_value'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
+            }
+        } elseif ($tab === 'cdnb2c') {
+            $stmt = $db->prepare("
+                SELECT cn.credit_note_number, cn.credit_note_date, cn.total_amount AS credit_note_value,
+                       COALESCE(NULLIF(cn.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                       cni.tax_rate AS gst_rate, SUM(cni.taxable_amount) AS taxable_amount,
+                       SUM(CASE WHEN cn.is_interstate = 1 THEN cni.tax_amount ELSE 0 END) AS igst_amount,
+                       SUM(CASE WHEN cn.is_interstate = 0 THEN cni.tax_amount / 2 ELSE 0 END) AS cgst_amount,
+                       SUM(CASE WHEN cn.is_interstate = 0 THEN cni.tax_amount / 2 ELSE 0 END) AS sgst_amount
+                FROM acc_credit_notes cn
+                JOIN acc_parties p ON cn.party_id = p.party_id
+                JOIN acc_credit_note_items cni ON cn.credit_note_id = cni.credit_note_id
+                WHERE (p.gstin IS NULL OR p.gstin = '') AND cn.credit_note_date BETWEEN ? AND ?
+                GROUP BY cn.credit_note_id, cni.tax_rate
+                ORDER BY cn.credit_note_date DESC, cn.credit_note_number DESC, cni.tax_rate ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'Credit Note Number', 'Date', 'Value', 'Place of Supply', 'GST Rate %', 'Taxable Value', 'IGST', 'CGST', 'SGST']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['credit_note_number'], $r['credit_note_date'], $r['credit_note_value'], $r['place_of_supply'], $r['gst_rate'], $r['taxable_amount'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
+            }
+        } elseif ($tab === 'hsnb2c') {
+            $stmt = $db->prepare("
+                SELECT COALESCE(NULLIF(ii.hsn_sac, ''), NULLIF(it.hsn_sac, ''), 'N/A') AS hsn_sac,
+                       COALESCE(NULLIF(ii.unit, ''), NULLIF(it.unit, ''), 'PCS') AS unit,
+                       ii.tax_rate, SUM(ii.quantity) AS total_quantity, SUM(ii.taxable_amount) AS taxable_amount,
+                       SUM(ii.tax_amount) AS tax_amount, SUM(ii.igst_amount) AS igst_amount,
+                       SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount, SUM(ii.total_amount) AS total_amount
+                FROM acc_invoice_items ii
+                JOIN acc_invoices i ON ii.invoice_id = i.invoice_id
+                JOIN acc_parties p ON i.party_id = p.party_id
+                LEFT JOIN acc_items it ON it.name = ii.item_name
+                WHERE i.status != 'CANCELLED' AND (p.gstin IS NULL OR p.gstin = '') AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY hsn_sac, unit, ii.tax_rate ORDER BY hsn_sac ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'HSN/SAC', 'Unit', 'Tax Rate %', 'Total Qty', 'Taxable Value', 'Tax Amount', 'IGST', 'CGST', 'SGST', 'Total']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['hsn_sac'], $r['unit'], $r['tax_rate'], $r['total_quantity'], $r['taxable_amount'], $r['tax_amount'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount'], $r['total_amount']]);
+            }
+        } elseif ($tab === 'hsnb2b') {
+            $stmt = $db->prepare("
+                SELECT COALESCE(NULLIF(ii.hsn_sac, ''), NULLIF(it.hsn_sac, ''), 'N/A') AS hsn_sac,
+                       COALESCE(NULLIF(ii.unit, ''), NULLIF(it.unit, ''), 'PCS') AS unit,
+                       ii.tax_rate, SUM(ii.quantity) AS total_quantity, SUM(ii.taxable_amount) AS taxable_amount,
+                       SUM(ii.tax_amount) AS tax_amount, SUM(ii.igst_amount) AS igst_amount,
+                       SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount, SUM(ii.total_amount) AS total_amount
+                FROM acc_invoice_items ii
+                JOIN acc_invoices i ON ii.invoice_id = i.invoice_id
+                JOIN acc_parties p ON i.party_id = p.party_id
+                LEFT JOIN acc_items it ON it.name = ii.item_name
+                WHERE i.status != 'CANCELLED' AND p.gstin IS NOT NULL AND p.gstin != '' AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY hsn_sac, unit, ii.tax_rate ORDER BY hsn_sac ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'HSN/SAC', 'Unit', 'Tax Rate %', 'Total Qty', 'Taxable Value', 'Tax Amount', 'IGST', 'CGST', 'SGST', 'Total']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['hsn_sac'], $r['unit'], $r['tax_rate'], $r['total_quantity'], $r['taxable_amount'], $r['tax_amount'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount'], $r['total_amount']]);
+            }
+        } elseif ($tab === 'item') {
+            $stmt = $db->prepare("
+                SELECT ii.item_name, COALESCE(NULLIF(ii.description, ''), NULLIF(it.description, ''), '-') AS description,
+                       COALESCE(NULLIF(ii.unit, ''), NULLIF(it.unit, ''), 'PCS') AS unit,
+                       ii.tax_rate, SUM(ii.quantity) AS total_quantity, SUM(ii.taxable_amount) AS taxable_amount,
+                       SUM(ii.tax_amount) AS tax_amount, SUM(ii.total_amount) AS total_amount
+                FROM acc_invoice_items ii
+                JOIN acc_invoices i ON ii.invoice_id = i.invoice_id
+                LEFT JOIN acc_items it ON it.name = ii.item_name
+                WHERE i.status != 'CANCELLED' AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY ii.item_name, unit, ii.tax_rate ORDER BY ii.item_name ASC
+            ");
+            $stmt->execute([$fromDate, $toDate]);
+            fputcsv($output, ['S.No.', 'Item Name', 'Description', 'Unit', 'Tax Rate %', 'Total Qty', 'Taxable Value', 'Tax Amount', 'Total Amount']);
+            $sno = 1;
+            foreach ($stmt->fetchAll() as $r) {
+                fputcsv($output, [$sno++, $r['item_name'], $r['description'], $r['unit'], $r['tax_rate'], $r['total_quantity'], $r['taxable_amount'], $r['tax_amount'], $r['total_amount']]);
+            }
+        } elseif ($tab === 'doc') {
+            $docStmt = $db->prepare("SELECT 'Tax Invoices' AS nature_of_doc, COUNT(*) AS total_issued, SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled_count, MIN(invoice_number) AS from_no, MAX(invoice_number) AS to_no FROM acc_invoices WHERE invoice_date BETWEEN ? AND ?");
+            $docStmt->execute([$fromDate, $toDate]);
+            $invDoc = $docStmt->fetch();
+
+            $cnDocStmt = $db->prepare("SELECT 'Credit Notes' AS nature_of_doc, COUNT(*) AS total_issued, 0 AS cancelled_count, MIN(credit_note_number) AS from_no, MAX(credit_note_number) AS to_no FROM acc_credit_notes WHERE credit_note_date BETWEEN ? AND ?");
+            $cnDocStmt->execute([$fromDate, $toDate]);
+            $cnDoc = $cnDocStmt->fetch();
+
+            fputcsv($output, ['S.No.', 'Nature of Document', 'Total Issued', 'Cancelled', 'From No', 'To No']);
+            fputcsv($output, [1, $invDoc['nature_of_doc'], $invDoc['total_issued'], $invDoc['cancelled_count'], $invDoc['from_no'] ?? '-', $invDoc['to_no'] ?? '-']);
+            fputcsv($output, [2, $cnDoc['nature_of_doc'], $cnDoc['total_issued'], $cnDoc['cancelled_count'], $cnDoc['from_no'] ?? '-', $cnDoc['to_no'] ?? '-']);
+        } elseif ($tab === 'summary') {
+            fputcsv($output, ['S.No.', 'GSTR-1 Category', 'Records Count', 'Taxable Value', 'Tax Amount', 'Total Value']);
+            // Summary rows
+            fputcsv($output, [1, '4A/4B/4C - B2B Invoices (Registered)', $gstr1Summary['b2b']['count'] ?? 0, $gstr1Summary['b2b']['taxable'] ?? 0, $gstr1Summary['b2b']['tax'] ?? 0, $gstr1Summary['b2b']['total'] ?? 0]);
+            fputcsv($output, [2, '5 - B2C (Large) Invoices', $gstr1Summary['b2c_l']['count'] ?? 0, $gstr1Summary['b2c_l']['taxable'] ?? 0, $gstr1Summary['b2c_l']['tax'] ?? 0, $gstr1Summary['b2c_l']['total'] ?? 0]);
+            fputcsv($output, [3, '7 - B2C (Small) Invoices', $gstr1Summary['b2c_s']['count'] ?? 0, $gstr1Summary['b2c_s']['taxable'] ?? 0, $gstr1Summary['b2c_s']['tax'] ?? 0, $gstr1Summary['b2c_s']['total'] ?? 0]);
+            fputcsv($output, [4, '9B - Credit Notes (B2B Registered)', $gstr1Summary['cdn_b2b']['count'] ?? 0, -abs($gstr1Summary['cdn_b2b']['taxable'] ?? 0), -abs($gstr1Summary['cdn_b2b']['tax'] ?? 0), -abs($gstr1Summary['cdn_b2b']['total'] ?? 0)]);
+            fputcsv($output, [5, '9B - Credit Notes (B2C Unregistered)', $gstr1Summary['cdn_b2c']['count'] ?? 0, -abs($gstr1Summary['cdn_b2c']['taxable'] ?? 0), -abs($gstr1Summary['cdn_b2c']['tax'] ?? 0), -abs($gstr1Summary['cdn_b2c']['total'] ?? 0)]);
+        }
+
+        fclose($output);
+        exit;
     }
 }

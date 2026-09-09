@@ -1,9 +1,36 @@
+<?php
+// Active tab detection to keep the user on the current tab when paginating
+$activeTab = $_GET['tab'] ?? 'b2b';
+
+// Apply pagination to all 10 datasets (10 records per page for clear navigation)
+list($pB2b, $metaB2b)         = lx_paginate($b2b ?? [], 10, 'page_b2b');
+list($pB2cLarge, $metaB2cl)   = lx_paginate($b2cLarge ?? [], 10, 'page_b2cl');
+list($pB2cSmall, $metaB2cs)   = lx_paginate($b2cSmall ?? [], 10, 'page_b2cs');
+list($pCnB2b, $metaCnB2b)     = lx_paginate($cnB2b ?? [], 10, 'page_cdnb2b');
+list($pCnB2c, $metaCnB2c)     = lx_paginate($cnB2c ?? [], 10, 'page_cdnb2c');
+list($pHsnB2c, $metaHsnB2c)   = lx_paginate($hsnB2c ?? [], 10, 'page_hsnb2c');
+list($pHsnB2b, $metaHsnB2b)   = lx_paginate($hsnB2b ?? [], 10, 'page_hsnb2b');
+list($pItem, $metaItem)       = lx_paginate($itemSummary ?? [], 10, 'page_item');
+list($pDocs, $metaDocs)       = lx_paginate($documents ?? [], 10, 'page_doc');
+
+// Summary table rows list
+$summaryRows = [
+    ['sno' => 1, 'category' => '4A/4B/4C - B2B Invoices (Registered)', 'count' => $gstr1Summary['b2b']['count'], 'taxable' => $gstr1Summary['b2b']['taxable'], 'tax' => $gstr1Summary['b2b']['tax'], 'total' => $gstr1Summary['b2b']['total'], 'is_negative' => false],
+    ['sno' => 2, 'category' => '5 - B2C (Large) Invoices', 'count' => $gstr1Summary['b2c_l']['count'], 'taxable' => $gstr1Summary['b2c_l']['taxable'], 'tax' => $gstr1Summary['b2c_l']['tax'], 'total' => $gstr1Summary['b2c_l']['total'], 'is_negative' => false],
+    ['sno' => 3, 'category' => '7 - B2C (Small) Invoices', 'count' => $gstr1Summary['b2c_s']['count'], 'taxable' => $gstr1Summary['b2c_s']['taxable'], 'tax' => $gstr1Summary['b2c_s']['tax'], 'total' => $gstr1Summary['b2c_s']['total'], 'is_negative' => false],
+    ['sno' => 4, 'category' => '9B - Credit Notes (B2B Registered)', 'count' => $gstr1Summary['cdn_b2b']['count'], 'taxable' => $gstr1Summary['cdn_b2b']['taxable'], 'tax' => $gstr1Summary['cdn_b2b']['tax'], 'total' => $gstr1Summary['cdn_b2b']['total'], 'is_negative' => true],
+    ['sno' => 5, 'category' => '9B - Credit Notes (B2C Unregistered)', 'count' => $gstr1Summary['cdn_b2c']['count'], 'taxable' => $gstr1Summary['cdn_b2c']['taxable'], 'tax' => $gstr1Summary['cdn_b2c']['tax'], 'total' => $gstr1Summary['cdn_b2c']['total'], 'is_negative' => true],
+];
+list($pSummary, $metaSummary) = lx_paginate($summaryRows, 10, 'page_summary');
+?>
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
         <h3 class="fw-bold text-uppercase mb-0">GSTR-1 Report</h3>
         <p class="text-muted small mb-0">Outward supplies filing data for <strong><?php echo htmlspecialchars($monthLabel); ?></strong></p>
     </div>
     <form method="GET" action="<?php echo APP_URL; ?>/reports/gstr1" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="tab" value="<?php echo htmlspecialchars($activeTab); ?>">
         <div>
             <label class="form-label small fw-bold text-muted mb-1">Filing Period</label>
             <input type="month" name="month" class="form-control form-control-sm" value="<?php echo htmlspecialchars($month); ?>" onchange="this.form.submit()">
@@ -45,22 +72,22 @@
 
 <!-- Tabs Navigation -->
 <ul class="nav nav-tabs mb-3" id="gstr1Tabs" role="tablist">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-b2b" type="button">1. B2B Summary</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-b2cl" type="button">2. B2C (Large)</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-b2cs" type="button">3. B2C (Small)</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cdnb2b" type="button">4. Credit Note – B2B</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cdnb2c" type="button">5. Credit Note – B2C</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hsn-b2c" type="button">6. HSN B2C</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hsn-b2b" type="button">7. HSN B2B</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-item" type="button">8. Item Summary</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button">9. Documents</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-summary" type="button">10. GSTR-1 Summary</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'b2b' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-b2b" type="button" onclick="setTab('b2b')">1. B2B Summary</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'b2cl' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-b2cl" type="button" onclick="setTab('b2cl')">2. B2C (Large)</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'b2cs' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-b2cs" type="button" onclick="setTab('b2cs')">3. B2C (Small)</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'cdnb2b' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-cdnb2b" type="button" onclick="setTab('cdnb2b')">4. Credit Note – B2B</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'cdnb2c' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-cdnb2c" type="button" onclick="setTab('cdnb2c')">5. Credit Note – B2C</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'hsnb2c' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-hsn-b2c" type="button" onclick="setTab('hsnb2c')">6. HSN B2C</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'hsnb2b' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-hsn-b2b" type="button" onclick="setTab('hsnb2b')">7. HSN B2B</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'item' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-item" type="button" onclick="setTab('item')">8. Item Summary</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'doc' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button" onclick="setTab('doc')">9. Documents</button></li>
+    <li class="nav-item"><button class="nav-link <?php echo $activeTab === 'summary' ? 'active' : ''; ?>" data-bs-toggle="tab" data-bs-target="#tab-summary" type="button" onclick="setTab('summary')">10. GSTR-1 Summary</button></li>
 </ul>
 
 <div class="tab-content">
 
     <!-- 1. B2B SUMMARY TAB -->
-    <div class="tab-pane fade show active" id="tab-b2b">
+    <div class="tab-pane fade <?php echo $activeTab === 'b2b' ? 'show active' : ''; ?>" id="tab-b2b">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <span class="fw-bold">1. B2B Summary (Split per GST Tax Rate Category)</span>
@@ -88,9 +115,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($b2b)): ?>
+                            <?php if (empty($pB2b)): ?>
                                 <tr><td colspan="12" class="text-center py-4 text-muted"><i class="bi bi-inbox me-1"></i>No B2B invoices found for this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($b2b as $r): ?>
+                            <?php else: $sno = $metaB2b['offset'] + 1; foreach ($pB2b as $r): ?>
                                 <tr>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td><code><?php echo htmlspecialchars($r['gstin']); ?></code></td>
@@ -109,15 +136,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaB2b); ?>
             </div>
         </div>
     </div>
 
     <!-- 2. B2C (LARGE) TAB -->
-    <div class="tab-pane fade" id="tab-b2cl">
+    <div class="tab-pane fade <?php echo $activeTab === 'b2cl' ? 'show active' : ''; ?>" id="tab-b2cl">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold">2. B2C (Large) Invoices (Interstate &gt; ₹2,50,000 to Unregistered Parties)</span>
+                <span class="fw-bold">2. B2C (Large) Invoices (Interstate &gt; ₹2,50,000)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=b2cl&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -137,9 +168,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($b2cLarge)): ?>
+                            <?php if (empty($pB2cLarge)): ?>
                                 <tr><td colspan="10" class="text-center py-4 text-muted">No B2C Large invoices in this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($b2cLarge as $r): ?>
+                            <?php else: $sno = $metaB2cl['offset'] + 1; foreach ($pB2cLarge as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -159,15 +190,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaB2cl); ?>
             </div>
         </div>
     </div>
 
     <!-- 3. B2C (SMALL) TAB -->
-    <div class="tab-pane fade" id="tab-b2cs">
+    <div class="tab-pane fade <?php echo $activeTab === 'b2cs' ? 'show active' : ''; ?>" id="tab-b2cs">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <span class="fw-bold">3. B2C (Small) Supplies (Grouped by POS &amp; Tax Rate)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=b2cs&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -184,9 +219,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($b2cSmall)): ?>
+                            <?php if (empty($pB2cSmall)): ?>
                                 <tr><td colspan="7" class="text-center py-4 text-muted">No B2C Small supplies in this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($b2cSmall as $r): ?>
+                            <?php else: $sno = $metaB2cs['offset'] + 1; foreach ($pB2cSmall as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -203,15 +238,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaB2cs); ?>
             </div>
         </div>
     </div>
 
     <!-- 4. CREDIT NOTE – B2B TAB -->
-    <div class="tab-pane fade" id="tab-cdnb2b">
+    <div class="tab-pane fade <?php echo $activeTab === 'cdnb2b' ? 'show active' : ''; ?>" id="tab-cdnb2b">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold">4. Credit Notes – B2B (Registered Parties, Split per Tax Rate)</span>
+                <span class="fw-bold">4. Credit Notes – B2B (Registered Parties)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=cdnb2b&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -233,9 +272,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($cnB2b)): ?>
+                            <?php if (empty($pCnB2b)): ?>
                                 <tr><td colspan="12" class="text-center py-4 text-muted">No B2B credit notes in this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($cnB2b as $r): ?>
+                            <?php else: $sno = $metaCnB2b['offset'] + 1; foreach ($pCnB2b as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td><code><?php echo htmlspecialchars($r['gstin']); ?></code></td>
@@ -257,15 +296,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaCnB2b); ?>
             </div>
         </div>
     </div>
 
     <!-- 5. CREDIT NOTE – B2C TAB -->
-    <div class="tab-pane fade" id="tab-cdnb2c">
+    <div class="tab-pane fade <?php echo $activeTab === 'cdnb2c' ? 'show active' : ''; ?>" id="tab-cdnb2c">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold">5. Credit Notes – B2C (Unregistered Parties, Split per Tax Rate)</span>
+                <span class="fw-bold">5. Credit Notes – B2C (Unregistered Parties)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=cdnb2c&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -285,9 +328,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($cnB2c)): ?>
+                            <?php if (empty($pCnB2c)): ?>
                                 <tr><td colspan="10" class="text-center py-4 text-muted">No B2C credit notes in this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($cnB2c as $r): ?>
+                            <?php else: $sno = $metaCnB2c['offset'] + 1; foreach ($pCnB2c as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -307,15 +350,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaCnB2c); ?>
             </div>
         </div>
     </div>
 
     <!-- 6. HSN B2C TAB -->
-    <div class="tab-pane fade" id="tab-hsn-b2c">
+    <div class="tab-pane fade <?php echo $activeTab === 'hsnb2c' ? 'show active' : ''; ?>" id="tab-hsn-b2c">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <span class="fw-bold">6. HSN B2C Summary (Unregistered Consumers)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=hsnb2c&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -336,9 +383,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($hsnB2c)): ?>
+                            <?php if (empty($pHsnB2c)): ?>
                                 <tr><td colspan="11" class="text-center py-4 text-muted">No HSN data for B2C supplies.</td></tr>
-                            <?php else: $sno = 1; foreach ($hsnB2c as $r): ?>
+                            <?php else: $sno = $metaHsnB2c['offset'] + 1; foreach ($pHsnB2c as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -359,15 +406,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaHsnB2c); ?>
             </div>
         </div>
     </div>
 
     <!-- 7. HSN B2B TAB -->
-    <div class="tab-pane fade" id="tab-hsn-b2b">
+    <div class="tab-pane fade <?php echo $activeTab === 'hsnb2b' ? 'show active' : ''; ?>" id="tab-hsn-b2b">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <span class="fw-bold">7. HSN B2B Summary (Registered Businesses)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=hsnb2b&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -388,9 +439,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($hsnB2b)): ?>
+                            <?php if (empty($pHsnB2b)): ?>
                                 <tr><td colspan="11" class="text-center py-4 text-muted">No HSN data for B2B supplies.</td></tr>
-                            <?php else: $sno = 1; foreach ($hsnB2b as $r): ?>
+                            <?php else: $sno = $metaHsnB2b['offset'] + 1; foreach ($pHsnB2b as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -411,15 +462,19 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaHsnB2b); ?>
             </div>
         </div>
     </div>
 
     <!-- 8. ITEM SUMMARY TAB -->
-    <div class="tab-pane fade" id="tab-item">
+    <div class="tab-pane fade <?php echo $activeTab === 'item' ? 'show active' : ''; ?>" id="tab-item">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <span class="fw-bold">8. Item Summary</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=item&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -438,9 +493,9 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php if (empty($itemSummary)): ?>
+                            <?php if (empty($pItem)): ?>
                                 <tr><td colspan="9" class="text-center py-4 text-muted">No items sold in this period.</td></tr>
-                            <?php else: $sno = 1; foreach ($itemSummary as $r): ?>
+                            <?php else: $sno = $metaItem['offset'] + 1; foreach ($pItem as $r): ?>
                                 <tr <?php echo !empty($r['is_dummy']) ? 'class="table-warning"' : ''; ?>>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td>
@@ -459,14 +514,20 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaItem); ?>
             </div>
         </div>
     </div>
 
     <!-- 9. DOCUMENTS TAB -->
-    <div class="tab-pane fade" id="tab-doc">
+    <div class="tab-pane fade <?php echo $activeTab === 'doc' ? 'show active' : ''; ?>" id="tab-doc">
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white"><span class="fw-bold">9. Document Summary (Nature of Document)</span></div>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold">9. Document Summary (Nature of Document)</span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=doc&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered align-middle mb-0">
@@ -481,7 +542,7 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <?php $sno = 1; foreach ($documents as $d): ?>
+                            <?php $sno = $metaDocs['offset'] + 1; foreach ($pDocs as $d): ?>
                                 <tr>
                                     <td class="text-center"><?php echo $sno++; ?></td>
                                     <td><strong><?php echo htmlspecialchars($d['nature_of_doc']); ?></strong></td>
@@ -494,14 +555,20 @@
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaDocs); ?>
             </div>
         </div>
     </div>
 
     <!-- 10. GSTR-1 SUMMARY TAB -->
-    <div class="tab-pane fade" id="tab-summary">
+    <div class="tab-pane fade <?php echo $activeTab === 'summary' ? 'show active' : ''; ?>" id="tab-summary">
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white"><span class="fw-bold">10. GSTR-1 Filing Summary - <?php echo htmlspecialchars($monthLabel); ?></span></div>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold">10. GSTR-1 Filing Summary - <?php echo htmlspecialchars($monthLabel); ?></span>
+                <a href="<?php echo APP_URL; ?>/reports/gstr1Export?tab=summary&month=<?php echo htmlspecialchars($month); ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+                </a>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered align-middle mb-0">
@@ -516,58 +583,42 @@
                             </tr>
                         </thead>
                         <tbody class="small">
-                            <tr>
-                                <td class="text-center">1</td>
-                                <td>4A/4B/4C - B2B Invoices (Registered)</td>
-                                <td class="text-end"><?php echo $gstr1Summary['b2b']['count']; ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2b']['taxable'], 2); ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2b']['tax'], 2); ?></td>
-                                <td class="text-end fw-bold"><?php echo number_format($gstr1Summary['b2b']['total'], 2); ?></td>
-                            </tr>
-                            <tr>
-                                <td class="text-center">2</td>
-                                <td>5 - B2C (Large) Invoices</td>
-                                <td class="text-end"><?php echo $gstr1Summary['b2c_l']['count']; ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2c_l']['taxable'], 2); ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2c_l']['tax'], 2); ?></td>
-                                <td class="text-end fw-bold"><?php echo number_format($gstr1Summary['b2c_l']['total'], 2); ?></td>
-                            </tr>
-                            <tr>
-                                <td class="text-center">3</td>
-                                <td>7 - B2C (Small) Invoices</td>
-                                <td class="text-end"><?php echo $gstr1Summary['b2c_s']['count']; ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2c_s']['taxable'], 2); ?></td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['b2c_s']['tax'], 2); ?></td>
-                                <td class="text-end fw-bold"><?php echo number_format($gstr1Summary['b2c_s']['total'], 2); ?></td>
-                            </tr>
-                            <tr class="text-danger">
-                                <td class="text-center">4</td>
-                                <td>9B - Credit Notes (B2B Registered)</td>
-                                <td class="text-end"><?php echo $gstr1Summary['cdn_b2b']['count']; ?></td>
-                                <td class="text-end">(<?php echo number_format($gstr1Summary['cdn_b2b']['taxable'], 2); ?>)</td>
-                                <td class="text-end">(<?php echo number_format($gstr1Summary['cdn_b2b']['tax'], 2); ?>)</td>
-                                <td class="text-end fw-bold">(<?php echo number_format($gstr1Summary['cdn_b2b']['total'], 2); ?>)</td>
-                            </tr>
-                            <tr class="text-danger">
-                                <td class="text-center">5</td>
-                                <td>9B - Credit Notes (B2C Unregistered)</td>
-                                <td class="text-end"><?php echo $gstr1Summary['cdn_b2c']['count']; ?></td>
-                                <td class="text-end">(<?php echo number_format($gstr1Summary['cdn_b2c']['taxable'], 2); ?>)</td>
-                                <td class="text-end">(<?php echo number_format($gstr1Summary['cdn_b2c']['tax'], 2); ?>)</td>
-                                <td class="text-end fw-bold">(<?php echo number_format($gstr1Summary['cdn_b2c']['total'], 2); ?>)</td>
-                            </tr>
+                            <?php foreach ($pSummary as $row): 
+                                $prefix = $row['is_negative'] ? '- ' : '';
+                                $class  = $row['is_negative'] ? 'text-danger' : '';
+                            ?>
+                                <tr class="<?php echo $class; ?>">
+                                    <td class="text-center"><?php echo $row['sno']; ?></td>
+                                    <td><?php echo htmlspecialchars($row['category']); ?></td>
+                                    <td class="text-end"><?php echo $row['count']; ?></td>
+                                    <td class="text-end"><?php echo $prefix . cur_symbol() . ' ' . number_format($row['taxable'], 2); ?></td>
+                                    <td class="text-end"><?php echo $prefix . cur_symbol() . ' ' . number_format($row['tax'], 2); ?></td>
+                                    <td class="text-end fw-bold"><?php echo $prefix . cur_symbol() . ' ' . number_format($row['total'], 2); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+
                             <tr class="border-top fs-6 fw-bold table-light">
                                 <td class="text-center">-</td>
                                 <td>Net Outward Tax Liability</td>
                                 <td class="text-end">-</td>
-                                <td class="text-end"><?php echo number_format($gstr1Summary['net_taxable'], 2); ?></td>
-                                <td class="text-end text-success"><?php echo cur_symbol(); ?> <?php echo number_format($gstr1Summary['net_tax'], 2); ?></td>
-                                <td class="text-end"><?php echo cur_symbol(); ?> <?php echo number_format($gstr1Summary['net_total'], 2); ?></td>
+                                <td class="text-end"><?php echo ($gstr1Summary['net_taxable'] < 0 ? '- ' : '') . cur_symbol() . ' ' . number_format(abs($gstr1Summary['net_taxable']), 2); ?></td>
+                                <td class="text-end text-success"><?php echo ($gstr1Summary['net_tax'] < 0 ? '- ' : '') . cur_symbol() . ' ' . number_format(abs($gstr1Summary['net_tax']), 2); ?></td>
+                                <td class="text-end"><?php echo ($gstr1Summary['net_total'] < 0 ? '- ' : '') . cur_symbol() . ' ' . number_format(abs($gstr1Summary['net_total']), 2); ?></td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <?php lx_pagination_links($metaSummary); ?>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+// Keeps active tab parameter persistent in URL across page reloads
+function setTab(tabName) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tabName);
+    window.history.replaceState(null, '', url);
+}
+</script>
