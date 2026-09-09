@@ -1,0 +1,19 @@
+open xampp 8.2.12 installed
+run apache and mysql
+there is a folder called database
+    in that a sql file called "lx_accounting"
+    there is sample mock database which is similar to original site database
+open http://localhost/phpmyadmin in browser
+new--Create & Run
+In phpMyAdmin, click New on the left menu.
+
+Type the name: lx_accounting and click the Create button.
+
+Click on the SQL tab at the top of the screen.
+
+Copy the entire text from your setup.sql file in VS Code, paste it into the big box in phpMyAdmin, and click Go at the bottom right.
+
+Access the application in your browser: http://localhost/accounting/public/.
+
+Click Parties > Sync Sellers to pull mock platform sellers into the accounting records.
+Create your first Tax Invoice and check that intra-state vs inter-state tax amounts calculate accurately on the dashboard.

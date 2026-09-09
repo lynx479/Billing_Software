@@ -1,0 +1,79 @@
+/*
+  Printable document styles (tax invoice / credit note / receipt).
+  Loaded globally from the layout header; values come from app/config/theme.php.
+*/
+/* Hidden on the normal screen */
+#printInvoiceArea {
+    display: none;
+}
+
+/* Activated strictly when window.print() runs */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 8mm 10mm; /* Reduced margins to prevent 2nd page overflow */
+    }
+    html, body {
+        background: var(--ui-surface) !important;
+        color: var(--ui-print-ink) !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+        font-size: 10px !important; /* Slightly smaller baseline */
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100% !important;
+    }
+    .d-print-none, .card, nav, header, aside, footer {
+        display: none !important;
+    }
+
+    #printInvoiceArea {
+        display: block !important; /* Removed flex 275mm min-height */
+        width: 100% !important;
+        background: var(--ui-surface) !important;
+        color: var(--ui-print-ink) !important;
+        box-sizing: border-box !important;
+    }
+
+    .print-table {
+        width: 100%;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        border: 1px solid var(--ui-print-ink);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .print-table th {
+        background-color: var(--ui-print-ink) !important;
+        color: var(--ui-surface) !important;
+        font-weight: 700;
+        padding: 5px 6px; /* Compact padding */
+        border: none;
+        border-bottom: 1px solid var(--ui-print-ink);
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .print-table td {
+        padding: 4px 6px; /* Compact row height */
+        border-bottom: 1px solid var(--ui-print-line);
+        border-right: 1px solid var(--ui-print-line);
+        color: var(--ui-print-ink) !important;
+    }
+    .print-table tr:last-child td {
+        border-bottom: none;
+    }
+    .print-table td:last-child, .print-table th:last-child {
+        border-right: none;
+    }
+
+    .no-border td {
+        border: none !important;
+        padding: 2px 4px;
+    }
+    
+    .print-avoid-break {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+}
