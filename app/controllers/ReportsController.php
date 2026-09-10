@@ -152,7 +152,7 @@ class ReportsController extends Controller {
         $b2cSmall = $b2cSmallStmt->fetchAll();
 
         // 4. Credit Note – B2B (Latest first) - Fixed: removed cn.invoice_number
-        $cnB2bStmt = $db->prepare("
+       $cnB2bStmt = $db->prepare("
             SELECT 
                 cn.credit_note_id,
                 cn.credit_note_number,
@@ -160,6 +160,7 @@ class ReportsController extends Controller {
                 cn.total_amount AS credit_note_value,
                 p.gstin,
                 p.name AS party_name,
+                (SELECT invoice_number FROM acc_invoices WHERE invoice_id = cn.original_invoice_id LIMIT 1) AS original_invoice_number,
                 COALESCE(NULLIF(cn.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
                 cni.tax_rate AS gst_rate,
                 SUM(cni.taxable_amount) AS taxable_amount,
