@@ -93,7 +93,8 @@ class ReportsController extends Controller {
             JOIN acc_parties p ON i.party_id = p.party_id
             JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
             WHERE i.status != 'CANCELLED' 
-              AND p.gstin IS NOT NULL AND p.gstin != ''
+            AND p.gstin IS NOT NULL AND p.gstin != ''
+            AND NOT (i.total_amount > 250000 AND (i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0)))
               AND i.invoice_date BETWEEN ? AND ?
             GROUP BY i.invoice_id, ii.tax_rate
             ORDER BY i.invoice_date DESC, i.invoice_number DESC, ii.tax_rate ASC
@@ -101,32 +102,32 @@ class ReportsController extends Controller {
         $b2bStmt->execute([$fromDate, $toDate]);
         $b2b = $b2bStmt->fetchAll();
 
-        // 2. B2C (Large) - Customers without GSTIN, interstate, amount > 250000
-        $b2cLargeStmt = $db->prepare("
-            SELECT 
-                i.invoice_id,
-                i.invoice_number,
-                i.invoice_date,
-                i.total_amount AS invoice_value,
-                COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
-                ii.tax_rate,
-                SUM(ii.taxable_amount) AS taxable_amount,
-                SUM(ii.igst_amount) AS igst_amount,
-                SUM(ii.cgst_amount) AS cgst_amount,
-                SUM(ii.sgst_amount) AS sgst_amount
-            FROM acc_invoices i
-            JOIN acc_parties p ON i.party_id = p.party_id
-            JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
-            WHERE i.status != 'CANCELLED'
-              AND (p.gstin IS NULL OR p.gstin = '')
-              AND (i.is_interstate = 1 OR i.igst_amount > 0)
-              AND i.total_amount > 250000
-              AND i.invoice_date BETWEEN ? AND ?
-            GROUP BY i.invoice_id, ii.tax_rate
-            ORDER BY i.invoice_date DESC, i.invoice_number DESC
-        ");
-        $b2cLargeStmt->execute([$fromDate, $toDate]);
-        $b2cLarge = $b2cLargeStmt->fetchAll();
+       // 2. B2C (Large) - Customers without GSTIN, interstate, amount > 250000
+            $b2cLargeStmt = $db->prepare("
+                SELECT 
+                    i.invoice_id,
+                    i.invoice_number,
+                    i.invoice_date,
+                    i.total_amount AS invoice_value,
+                    COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                    ii.tax_rate,
+                    SUM(ii.taxable_amount) AS taxable_amount,
+                    SUM(ii.igst_amount) AS igst_amount,
+                    SUM(ii.cgst_amount) AS cgst_amount,
+                    SUM(ii.sgst_amount) AS sgst_amount,
+                    SUM(ii.total_amount) AS total_amount
+                FROM acc_invoices i
+                JOIN acc_parties p ON i.party_id = p.party_id
+                JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
+                WHERE i.status != 'CANCELLED'
+                AND (i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0))
+                AND i.total_amount > 250000
+                AND i.invoice_date BETWEEN ? AND ?
+                GROUP BY i.invoice_id, ii.tax_rate
+                ORDER BY i.invoice_date DESC, i.invoice_number DESC
+            ");
+            $b2cLargeStmt->execute([$fromDate, $toDate]);
+            $b2cLarge = $b2cLargeStmt->fetchAll();
 
         // 3. B2C (Small) - Customers without GSTIN (all remaining)
         $b2cSmallStmt = $db->prepare("
@@ -142,8 +143,7 @@ class ReportsController extends Controller {
             JOIN acc_parties p ON i.party_id = p.party_id
             JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
             WHERE i.status != 'CANCELLED'
-              AND (p.gstin IS NULL OR p.gstin = '')
-              AND NOT ((i.is_interstate = 1 OR i.igst_amount > 0) AND i.total_amount > 250000)
+              AND NOT ((i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0)) AND i.total_amount > 250000)
               AND i.invoice_date BETWEEN ? AND ?
             GROUP BY place_of_supply, ii.tax_rate
             ORDER BY place_of_supply ASC, ii.tax_rate ASC
@@ -338,11 +338,7 @@ class ReportsController extends Controller {
         ];
 
         // Sample fallback data
-        if (empty($b2cLarge)) {
-            $b2cLarge = [
-                ['is_dummy' => true, 'invoice_number' => 'INV-L-1001', 'invoice_date' => $fromDate, 'invoice_value' => 295000.00, 'place_of_supply' => '33-Tamil Nadu', 'tax_rate' => 18.00, 'taxable_amount' => 250000.00, 'igst_amount' => 45000.00, 'cgst_amount' => 0.00, 'sgst_amount' => 0.00]
-            ];
-        }
+     
 
         if (empty($b2cSmall)) {
             $b2cSmall = [
@@ -425,7 +421,7 @@ class ReportsController extends Controller {
                 FROM acc_invoices i
                 JOIN acc_parties p ON i.party_id = p.party_id
                 JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
-                WHERE i.status != 'CANCELLED' AND p.gstin IS NOT NULL AND p.gstin != '' AND i.invoice_date BETWEEN ? AND ?
+                WHERE i.status != 'CANCELLED' AND p.gstin IS NOT NULL AND p.gstin != '' AND NOT (i.total_amount > 250000 AND (i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0))) AND i.invoice_date BETWEEN ? AND ?
                 GROUP BY i.invoice_id, ii.tax_rate
                 ORDER BY i.invoice_date DESC, i.invoice_number DESC, ii.tax_rate ASC
             ");
@@ -435,17 +431,17 @@ class ReportsController extends Controller {
             foreach ($stmt->fetchAll() as $r) {
                 fputcsv($output, [$sno++, $r['gstin'], $r['party_name'], $r['invoice_number'], $r['invoice_date'], $r['invoice_value'], $r['place_of_supply'], $r['gst_rate'], $r['tax_value'], $r['igst_amount'], $r['cgst_amount'], $r['sgst_amount']]);
             }
-        } elseif ($tab === 'b2cl') {
+                } elseif ($tab === 'b2cl') {
             $stmt = $db->prepare("
                 SELECT i.invoice_number, i.invoice_date, i.total_amount AS invoice_value,
-                       COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
-                       ii.tax_rate, SUM(ii.taxable_amount) AS taxable_amount, SUM(ii.igst_amount) AS igst_amount,
-                       SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount
+                    COALESCE(NULLIF(i.place_of_supply, ''), p.state, 'N/A') AS place_of_supply,
+                    ii.tax_rate, SUM(ii.taxable_amount) AS taxable_amount, SUM(ii.igst_amount) AS igst_amount,
+                    SUM(ii.cgst_amount) AS cgst_amount, SUM(ii.sgst_amount) AS sgst_amount
                 FROM acc_invoices i
                 JOIN acc_parties p ON i.party_id = p.party_id
                 JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
                 WHERE i.status != 'CANCELLED' AND (p.gstin IS NULL OR p.gstin = '')
-                  AND (i.is_interstate = 1 OR i.igst_amount > 0) AND i.total_amount > 250000 AND i.invoice_date BETWEEN ? AND ?
+                AND (i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0)) AND i.total_amount > 250000 AND i.invoice_date BETWEEN ? AND ?
                 GROUP BY i.invoice_id, ii.tax_rate
                 ORDER BY i.invoice_date DESC, i.invoice_number DESC
             ");
@@ -464,7 +460,7 @@ class ReportsController extends Controller {
                 JOIN acc_parties p ON i.party_id = p.party_id
                 JOIN acc_invoice_items ii ON i.invoice_id = ii.invoice_id
                 WHERE i.status != 'CANCELLED' AND (p.gstin IS NULL OR p.gstin = '')
-                  AND NOT ((i.is_interstate = 1 OR i.igst_amount > 0) AND i.total_amount > 250000) AND i.invoice_date BETWEEN ? AND ?
+                AND NOT ((i.is_interstate = 1 OR i.igst_amount > 0 OR EXISTS (SELECT 1 FROM acc_invoice_items x WHERE x.invoice_id = i.invoice_id AND x.igst_amount > 0)) AND i.total_amount > 250000) AND i.invoice_date BETWEEN ? AND ?
                 GROUP BY place_of_supply, ii.tax_rate
                 ORDER BY place_of_supply ASC, ii.tax_rate ASC
             ");
