@@ -6,15 +6,29 @@ class ItemsController extends Controller {
 
        $sql = "SELECT i.*, 
                        c.category_name,
-                       u.unit_name,
-                       MAX(t.tax_name) AS tax_name
-                FROM acc_items i
-                LEFT JOIN acc_categories c ON i.category_id = c.category_id
-                LEFT JOIN acc_units u ON i.unit = u.unit_symbol
-                LEFT JOIN acc_taxes t ON i.tax_rate = t.tax_rate
-                WHERE i.status = 1
-                GROUP BY i.item_id
-                ORDER BY i.name ASC";
+                   u.unit_name,
+                   MAX(t.tax_name) AS tax_name,
+                   (
+                       SELECT COUNT(*)
+                       FROM acc_invoice_items it
+                       JOIN acc_invoices inv ON it.invoice_id = inv.invoice_id
+                       WHERE (it.item_name = i.name OR it.item_name = i.sku)
+                         AND inv.status != 'CANCELLED'
+                   ) AS invoice_refs,
+                   (
+                       SELECT COUNT(*)
+                       FROM acc_credit_note_items cni
+                       JOIN acc_credit_notes cn ON cni.credit_note_id = cn.credit_note_id
+                       WHERE (cni.item_name = i.name OR cni.item_name = i.sku)
+                         AND cn.status != 'CANCELLED'
+                   ) AS credit_refs
+            FROM acc_items i
+            LEFT JOIN acc_categories c ON i.category_id = c.category_id
+            LEFT JOIN acc_units u ON i.unit = u.unit_symbol
+            LEFT JOIN acc_taxes t ON i.tax_rate = t.tax_rate
+            WHERE i.status = 1
+            GROUP BY i.item_id
+            ORDER BY i.name ASC";
 
         $items = $db->query($sql)->fetchAll();
         $categories = $db->query("SELECT * FROM acc_categories WHERE status = 1 ORDER BY category_name ASC")->fetchAll();
@@ -170,16 +184,70 @@ class ItemsController extends Controller {
         ]);
     }
 
-    // Handle Item Deletion
-    public function delete($id = null) {
-        if ($id) {
-            $db = (new Model())->getDb();
-            $stmt = $db->prepare("UPDATE acc_items SET status = 0 WHERE item_id = ?");
-            $stmt->execute([$id]);
-        }
+    // Handle Item Deletion — blocked if the item is referenced by any transaction
+public function delete($id = null) {
+    if (!$id) {
         header('Location: ' . APP_URL . '/items');
         exit;
     }
+
+    $db = (new Model())->getDb();
+
+    // 1. Fetch the item's name + sku (needed to match against invoice / credit-note lines)
+    $stmt = $db->prepare("SELECT name, sku FROM acc_items WHERE item_id = ?");
+    $stmt->execute([$id]);
+    $item = $stmt->fetch();
+
+    if (!$item) {
+        header('Location: ' . APP_URL . '/items');
+        exit;
+    }
+
+    $name = $item['name'];
+    $sku  = $item['sku'];
+
+    // 2. Count active sales (invoice line items)
+    $stmt = $db->prepare("
+        SELECT COUNT(*)
+        FROM acc_invoice_items it
+        JOIN acc_invoices inv ON it.invoice_id = inv.invoice_id
+        WHERE (it.item_name = ? OR it.item_name = ?)
+          AND inv.status != 'CANCELLED'
+    ");
+    $stmt->execute([$name, $sku]);
+    $invoiceRefs = (int)$stmt->fetchColumn();
+
+    // 3. Count credit notes / returns
+    $stmt = $db->prepare("
+        SELECT COUNT(*)
+        FROM acc_credit_note_items cni
+        JOIN acc_credit_notes cn ON cni.credit_note_id = cn.credit_note_id
+        WHERE (cni.item_name = ? OR cni.item_name = ?)
+          AND cn.status != 'CANCELLED'
+    ");
+    $stmt->execute([$name, $sku]);
+    $creditRefs = (int)$stmt->fetchColumn();
+
+    $totalRefs = $invoiceRefs + $creditRefs;
+
+    // 4. Refuse if any references exist
+    if ($totalRefs > 0) {
+        $_SESSION['flash_error'] =
+            "Cannot delete \"{$name}\" — it is referenced by {$invoiceRefs} invoice line(s) " .
+            "and {$creditRefs} credit note line(s). " .
+            "Cancel or remove those documents first.";
+        header('Location: ' . APP_URL . '/items');
+        exit;
+    }
+
+    // 5. Safe to soft-delete
+    $stmt = $db->prepare("UPDATE acc_items SET status = 0 WHERE item_id = ?");
+    $stmt->execute([$id]);
+
+    $_SESSION['flash_success'] = "Item \"{$name}\" deleted successfully.";
+    header('Location: ' . APP_URL . '/items');
+    exit;
+}
 
     // AJAX Endpoint: Fetch 8-column Transaction History for a specific product
     public function getItemTransactionsAjax($itemId = null) {

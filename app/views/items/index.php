@@ -1,3 +1,18 @@
+<?php if (!empty($_SESSION['flash_error'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <?php echo htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($_SESSION['flash_success'])): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle me-1"></i>
+        <?php echo htmlspecialchars($_SESSION['flash_success']); unset($_SESSION['flash_success']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h3 class="fw-bold text-uppercase mb-0 tracking-wide" >ITEM &amp; PRODUCT MASTER</h3>
