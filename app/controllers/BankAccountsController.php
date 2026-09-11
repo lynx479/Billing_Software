@@ -1,10 +1,28 @@
 <?php
 class BankAccountsController extends Controller {
     public function index() {
-        $db = (new Model())->getDb();
-        $accounts = $db->query("SELECT * FROM acc_bank_accounts WHERE status = 1 ORDER BY bank_id DESC")->fetchAll();
-        $this->view('bank-accounts/index', ['accounts' => $accounts]);
-    }
+    $db = (new Model())->getDb();
+
+    $sql = "
+        SELECT 
+            b.*,
+            b.current_balance AS opening_balance,
+            b.current_balance
+              + COALESCE(SUM(CASE WHEN p.payment_type = 'PAY_IN'  THEN p.amount ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN p.payment_type = 'PAY_OUT' THEN p.amount ELSE 0 END), 0)
+            AS live_balance
+        FROM acc_bank_accounts b
+        LEFT JOIN acc_payments p 
+               ON p.bank_id = b.bank_id 
+              AND p.status != 'CANCELLED'
+        WHERE b.status = 1
+        GROUP BY b.bank_id
+        ORDER BY b.bank_id DESC
+    ";
+
+    $accounts = $db->query($sql)->fetchAll();
+    $this->view('bank-accounts/index', ['accounts' => $accounts]);
+}
 
     public function create() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -46,14 +64,36 @@ class BankAccountsController extends Controller {
     }
 
         public function delete($id = null) {
-        if ($id) {
-            $db = (new Model())->getDb();
-            $stmt = $db->prepare("UPDATE acc_bank_accounts SET status = 0 WHERE bank_id = ?");
-            $stmt->execute([$id]);
-        }
+    if (!$id) {
         header('Location: ' . APP_URL . '/bankAccounts');
         exit;
     }
+
+    $db = (new Model())->getDb();
+
+    // Refuse to deactivate if the account has any non-cancelled transactions
+    $stmt = $db->prepare("
+        SELECT COUNT(*) 
+        FROM acc_payments 
+        WHERE bank_id = ? AND status != 'CANCELLED'
+    ");
+    $stmt->execute([$id]);
+    $txCount = (int)$stmt->fetchColumn();
+
+    if ($txCount > 0) {
+        $_SESSION['flash_error'] = "Cannot delete this bank account — it has {$txCount} transaction(s) linked to it. Delete or reassign those payments first.";
+        header('Location: ' . APP_URL . '/bankAccounts');
+        exit;
+    }
+
+    // Safe to deactivate
+    $stmt = $db->prepare("UPDATE acc_bank_accounts SET status = 0 WHERE bank_id = ?");
+    $stmt->execute([$id]);
+
+    $_SESSION['flash_success'] = 'Bank account deleted successfully.';
+    header('Location: ' . APP_URL . '/bankAccounts');
+    exit;
+}
 
     /**
      * Dedicated account page: shows every Pay-In / Pay-Out transaction that
@@ -85,7 +125,7 @@ class BankAccountsController extends Controller {
         $transactions = $stmt->fetchAll();
 
         // Running balance, oldest -> newest, then reverse for newest-first display
-        $running = 0.00;
+        $running = (float)$account['current_balance'];
         $totalIn = 0.00;
         $totalOut = 0.00;
         foreach ($transactions as &$t) {

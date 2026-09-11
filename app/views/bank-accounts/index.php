@@ -1,3 +1,18 @@
+<?php if (!empty($_SESSION['flash_error'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <?php echo htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($_SESSION['flash_success'])): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle me-1"></i>
+        <?php echo htmlspecialchars($_SESSION['flash_success']); unset($_SESSION['flash_success']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="fw-bold mb-0">Bank & Cash Accounts</h4>
@@ -56,7 +71,11 @@
                                     <?php echo htmlspecialchars($a['account_type'] ?? 'CURRENT'); ?>
                                  </span>
                             </td>
-                            <td><strong class="text-success"><?php echo cur_symbol(); ?> <?php echo number_format($a['current_balance'], 2); ?></strong></td>
+                            <td>
+                                 <strong class="<?php echo balance_color_class($a['live_balance']); ?>">
+                                  <?php echo cur_symbol(); ?> <?php echo number_format(abs($a['live_balance']), 2); ?>
+                                </strong>
+                             </td>
                                 <td class="text-center">
                                 <div class="dropdown">
                                     <button class="btn btn-sm btn-light border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
