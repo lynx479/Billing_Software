@@ -87,10 +87,7 @@ $ui_page_subtitle = isset($pageSubtitle) ? $pageSubtitle : $ui_resolved[1];
             </div>
         </div>
 
-        <div class="navbar-search">
-            <i class="bi bi-search" aria-hidden="true"></i>
-            <input type="search" id="globalSearch" placeholder="Search invoices, parties, items&hellip;" aria-label="Search">
-        </div>
+       
 
         <div class="navbar-right">
             <div class="dropdown">

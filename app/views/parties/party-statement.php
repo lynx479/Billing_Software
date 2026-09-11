@@ -117,7 +117,7 @@
                 <?php if (empty($invoices)): ?>
                     <tr><td colspan="8" class="text-center py-4 text-muted">No tax invoices for this party.</td></tr>
                 <?php else: ?>
-                    <?php list($pagedInvoices, $invPg) = lx_paginate($invoices, 20, 'inv_page'); $n = $invPg['offset']; ?>
+                    <?php list($pagedInvoices, $invPg) = lx_paginate($invoices, 5, 'inv_page'); $n = $invPg['offset']; ?>
                     <?php foreach ($pagedInvoices as $t): $n++; ?>
                         <tr>
                             <td class="text-muted"><?php echo $n; ?></td>
@@ -163,7 +163,7 @@
                 <?php if (empty($creditNotes)): ?>
                     <tr><td colspan="8" class="text-center py-4 text-muted">No credit notes for this party.</td></tr>
                 <?php else: ?>
-                    <?php list($pagedCns, $cnPg) = lx_paginate($creditNotes, 20, 'cn_page'); $n = $cnPg['offset']; ?>
+                    <?php list($pagedCns, $cnPg) = lx_paginate($creditNotes, 5, 'cn_page'); $n = $cnPg['offset']; ?>
                     <?php foreach ($pagedCns as $t): $n++; ?>
                         <tr>
                             <td class="text-muted"><?php echo $n; ?></td>
@@ -216,7 +216,7 @@ foreach ($paymentSections as $section):
                 <?php if (empty($section['rows'])): ?>
                     <tr><td colspan="9" class="text-center py-4 text-muted">No <?php echo $section['title']; ?> records for this party.</td></tr>
                 <?php else: ?>
-                    <?php list($pagedPays, $payPg) = lx_paginate($section['rows'], 20, $section['param']); $n = $payPg['offset']; ?>
+                    <?php list($pagedPays, $payPg) = lx_paginate($section['rows'], 5, $section['param']); $n = $payPg['offset']; ?>
                     <?php foreach ($pagedPays as $t): $n++; ?>
                         <tr>
                             <td class="text-muted"><?php echo $n; ?></td>
