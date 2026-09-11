@@ -28,10 +28,7 @@
                     <input type="text" name="search" class="form-control" placeholder="Search by Ref #, Party, Phone..." value="<?php echo htmlspecialchars($filters['search'] ?? ''); ?>">
                 </div>
             </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-bold text-muted mb-1">Tax Amount</label>
-                <input type="number" step="0.01" name="tax_amount" class="form-control form-control-sm" placeholder="e.g. 180.00" value="<?php echo htmlspecialchars($filters['tax_amount'] ?? ''); ?>">
-            </div>
+           
             <div class="col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-funnel me-1"></i> Filter</button>
                 <a href="<?php echo APP_URL; ?>/payments/payIn" class="btn btn-outline-secondary btn-sm" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></a>
