@@ -141,12 +141,17 @@ class BankAccountsController extends Controller {
         unset($t);
         $transactions = array_reverse($transactions);
 
-        $this->view('bank-accounts/show', [
-            'account' => $account,
-            'transactions' => $transactions,
-            'summary' => ['totalIn' => $totalIn, 'totalOut' => $totalOut, 'netMovement' => $totalIn - $totalOut],
-            'filters' => ['from_date' => $fromDate, 'to_date' => $toDate]
-        ]);
+         $this->view('bank-accounts/show', [
+                'account'        => $account,
+                'transactions'   => $transactions,
+                'summary'        => [
+                    'totalIn'     => $totalIn,
+                    'totalOut'    => $totalOut,
+                    'netMovement' => $totalIn - $totalOut,
+                    'closing'     => (float)$account['current_balance'] + $totalIn - $totalOut,  // <-- new
+                ],
+                'filters'        => ['from_date' => $fromDate, 'to_date' => $toDate]
+         ]);
     }
 
     /**

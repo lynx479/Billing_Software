@@ -29,11 +29,16 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card shadow-sm border-0 border-start border-primary border-4 p-3">
-            <span class="text-muted small fw-bold text-uppercase">Current Balance</span>
-            <h5 class="fw-bold mb-0 mt-1 <?php echo balance_color_class($account['current_balance']); ?>"><?php echo cur_symbol(); ?> <?php echo number_format(abs($account['current_balance']), 2); ?></h5>
-        </div>
+    <div class="card shadow-sm border-0 border-start border-primary border-4 p-3">
+        <span class="text-muted small fw-bold text-uppercase">Current Balance</span>
+        <h5 class="fw-bold mb-0 mt-1 <?php echo balance_color_class($summary['closing']); ?>">
+            <?php echo cur_symbol(); ?> <?php echo number_format(abs($summary['closing']), 2); ?>
+        </h5>
+        <small class="text-muted">
+            Opening: <?php echo cur_symbol(); ?> <?php echo number_format($account['current_balance'], 2); ?>
+        </small>
     </div>
+</div>
 </div>
 
 <!-- Filters -->
@@ -75,34 +80,49 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($transactions)): ?>
-                        <tr>
-                            <td colspan="8" class="table-empty-state">
-                                <i class="bi bi-inbox"></i>
-                                No transactions recorded against this account yet.
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                        <?php list($pagedTx, $txPg) = lx_paginate($transactions, 25); ?>
-                        <?php foreach ($pagedTx as $t): $isIn = ($t['payment_type'] === 'PAY_IN'); ?>
-                        <tr style="cursor: pointer;" onclick="window.location='<?php echo APP_URL; ?>/payments/preview/<?php echo $t['payment_id']; ?>'">
-                            <td><?php echo date('d/m/Y', strtotime($t['payment_date'])); ?></td>
-                            <td class="text-muted small"><?php echo !empty($t['created_at']) ? date('H:i', strtotime($t['created_at'])) : '-'; ?></td>
-                            <td><strong class="<?php echo $isIn ? 'text-success' : 'text-danger'; ?>"><?php echo htmlspecialchars($t['reference_number']); ?></strong></td>
-                            <td><?php echo htmlspecialchars($t['party_name'] ?? '-'); ?></td>
-                            <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($t['payment_method']); ?></span></td>
-                            <td class="text-center">
-                                <span class="badge bg-<?php echo $isIn ? 'success' : 'danger'; ?>"><?php echo $isIn ? 'Received' : 'Paid'; ?></span>
-                            </td>
-                            <td class="text-end fw-bold <?php echo $isIn ? 'text-success' : 'text-danger'; ?>">
-                                <?php echo $isIn ? '+' : '-'; ?><?php echo cur_symbol(); ?> <?php echo number_format($t['amount'], 2); ?>
-                            </td>
-                            <td class="text-end fw-bold <?php echo balance_color_class($t['running_balance']); ?>">
-                                <?php echo cur_symbol(); ?> <?php echo number_format(abs($t['running_balance']), 2); ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php list($pagedTx, $txPg) = lx_paginate($transactions, 25); ?>
+
+<?php if (empty($transactions)): ?>
+    <tr class="table-light">
+        <td colspan="7" class="text-end fw-bold">Opening Balance</td>
+        <td class="text-end fw-bold <?php echo balance_color_class($account['current_balance']); ?>">
+            <?php echo cur_symbol(); ?> <?php echo number_format(abs($account['current_balance']), 2); ?>
+        </td>
+    </tr>
+    <tr>
+        <td colspan="8" class="table-empty-state">
+            <i class="bi bi-inbox"></i>
+            No transactions recorded against this account yet.
+        </td>
+    </tr>
+<?php else: ?>
+    <?php foreach ($pagedTx as $t): $isIn = ($t['payment_type'] === 'PAY_IN'); ?>
+        <tr style="cursor: pointer;" onclick="window.location='<?php echo APP_URL; ?>/payments/preview/<?php echo $t['payment_id']; ?>'">
+            <td><?php echo date('d/m/Y', strtotime($t['payment_date'])); ?></td>
+            <td class="text-muted small"><?php echo !empty($t['created_at']) ? date('H:i', strtotime($t['created_at'])) : '-'; ?></td>
+            <td><strong class="<?php echo $isIn ? 'text-success' : 'text-danger'; ?>"><?php echo htmlspecialchars($t['reference_number']); ?></strong></td>
+            <td><?php echo htmlspecialchars($t['party_name'] ?? '-'); ?></td>
+            <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($t['payment_method']); ?></span></td>
+            <td class="text-center">
+                <span class="badge bg-<?php echo $isIn ? 'success' : 'danger'; ?>"><?php echo $isIn ? 'Received' : 'Paid'; ?></span>
+            </td>
+            <td class="text-end fw-bold <?php echo $isIn ? 'text-success' : 'text-danger'; ?>">
+                <?php echo $isIn ? '+' : '-'; ?><?php echo cur_symbol(); ?> <?php echo number_format($t['amount'], 2); ?>
+            </td>
+            <td class="text-end fw-bold <?php echo balance_color_class($t['running_balance']); ?>">
+                <?php echo cur_symbol(); ?> <?php echo number_format(abs($t['running_balance']), 2); ?>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+
+    <!-- Opening Balance = the very first event, shown at the bottom -->
+    <tr class="table-light">
+        <td colspan="7" class="text-end fw-bold text-uppercase small">Opening Balance</td>
+        <td class="text-end fw-bold <?php echo balance_color_class($account['current_balance']); ?>">
+            <?php echo cur_symbol(); ?> <?php echo number_format(abs($account['current_balance']), 2); ?>
+        </td>
+    </tr>
+<?php endif; ?>
                 </tbody>
             </table>
         </div>
